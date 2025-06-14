@@ -4,7 +4,7 @@ const http = require('http');
 const socketIo = require('socket.io');
 const csv = require('csv-parser');
 const fs = require('fs');
-const db = require('./db');
+const { sql, poolPromise } = require('./db'); // updated import
 
 const app = express();
 const server = http.createServer(app);
@@ -15,15 +15,20 @@ const io = socketIo(server, {
 app.use(cors());
 app.use(express.json());
 
-app.get('/api/calls', (req, res) => {
-  db.query('SELECT * FROM fraud_calls ORDER BY CallID DESC', (err, results) => {
-    if (err) return res.status(500).json({ error: 'DB Error' });
-    res.json(results);
-  });
+// 🟢 GET: Fetch calls
+app.get('/api/calls', async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request().query('SELECT * FROM fraud_calls ORDER BY CallID DESC');
+    res.json(result.recordset);
+  } catch (err) {
+    console.error('DB Error:', err);
+    res.status(500).json({ error: 'DB Error' });
+  }
 });
 
 // 📤 Broadcast updates to frontend
-function insertCallsFromCSVAndEmit() {
+async function insertCallsFromCSVAndEmit() {
   const rows = [];
 
   fs.createReadStream('calls.csv')
@@ -31,11 +36,13 @@ function insertCallsFromCSVAndEmit() {
     .on('data', (row) => {
       rows.push(row); // Collect all rows
     })
-    .on('end', () => {
+    .on('end', async () => {
       console.log(`Total rows to insert: ${rows.length}`);
       let index = 0;
 
-      const interval = setInterval(() => {
+      const pool = await poolPromise;
+
+      const interval = setInterval(async () => {
         if (index >= rows.length) {
           clearInterval(interval);
           console.log('Finished inserting all rows');
@@ -53,31 +60,32 @@ function insertCallsFromCSVAndEmit() {
 
         const formattedWindowEnd = new Date(row.WindowEnd).toISOString().slice(0, 19).replace('T', ' ');
 
-        const values = [
-          callId, formattedWindowEnd, row.Country,
-          row.CallerNumber, row.ReceiverNumber,
-          callDuration, row.CallType, row.FraudType
-        ];
+        try {
+          await pool.request()
+            .input('CallID', sql.Int, callId)
+            .input('WindowEnd', sql.DateTime, formattedWindowEnd)
+            .input('Country', sql.VarChar, row.Country)
+            .input('CallerNumber', sql.VarChar, row.CallerNumber)
+            .input('ReceiverNumber', sql.VarChar, row.ReceiverNumber)
+            .input('CallDuration', sql.Int, callDuration)
+            .input('CallType', sql.VarChar, row.CallType)
+            .input('FraudType', sql.VarChar, row.FraudType)
+            .query(`IF NOT EXISTS (SELECT 1 FROM fraud_calls WHERE CallID = @CallID)
+              INSERT INTO fraud_calls 
+              (CallID, WindowEnd, Country, CallerNumber, ReceiverNumber, CallDuration, CallType, FraudType)
+              VALUES (@CallID, @WindowEnd, @Country, @CallerNumber, @ReceiverNumber, @CallDuration, @CallType, @FraudType)`);
 
-        db.query(
-          'INSERT IGNORE INTO fraud_calls (CallID, WindowEnd, Country, CallerNumber, ReceiverNumber, CallDuration, CallType, FraudType) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-          values,
-          (err, result) => {
-            if (err) {
-              console.error('DB Insert Error:', err);
-            } else {
-              console.log(`Inserted CallID ${callId}`);
-              io.emit('new-call', row);
-            }
-          }
-        );
-      }, 1000); 
+          console.log(`Inserted CallID ${callId}`);
+          io.emit('new-call', row);
+        } catch (err) {
+          console.error('Insert error:', err);
+        }
+      }, 1000);
     })
     .on('error', (err) => {
       console.error('Error reading CSV:', err);
     });
 }
-
 
 insertCallsFromCSVAndEmit(); // Run once when server starts
 
