@@ -1,0 +1,24 @@
+{
+  "name": "serverless-cloud-native-app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KajalGhule/Serverless-Cloud-Native-App.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/KajalGhule/Serverless-Cloud-Native-App/issues"
+  },
+  "homepage": "https://github.com/KajalGhule/Serverless-Cloud-Native-App#readme",
+  "dependencies": {
+    "express": "^5.1.0",
+    "mysql2": "^3.14.1"
+  }
+}

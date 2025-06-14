@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Live Fraud Call Dashboard</title>
+  <style>
+    body { font-family: Arial; padding: 20px; background: #f4f4f4; }
+    h2 { color: #333; }
+    table { width: 100%; border-collapse: collapse; background: #fff; margin-top: 10px; }
+    th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+    th { background: #f0f0f0; }
+  </style>
+</head>
+<body>
+
+  <h2>Live Fraud Call Monitoring</h2>
+  <p>Refreshing every 5 seconds...</p>
+
+  <table id="calls-table">
+    <thead id="table-head"></thead>
+    <tbody id="table-body"></tbody>
+  </table>
+
+  <script>
+    async function fetchData() {
+      try {
+        const response = await fetch('/api/calls');
+        const data = await response.json();
+
+        const tableHead = document.getElementById('table-head');
+        const tableBody = document.getElementById('table-body');
+        
+        tableBody.innerHTML = '';
+
+        if (data.length > 0) {
+          // Dynamically create headers
+          tableHead.innerHTML = '<tr>' +
+            Object.keys(data[0]).map(key => `<th>${key}</th>`).join('') +
+            '</tr>';
+          
+          // Add data rows
+          data.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = Object.values(row).map(val => `<td>${val}</td>`).join('');
+            tableBody.appendChild(tr);
+          });
+        } else {
+          tableHead.innerHTML = '';
+          tableBody.innerHTML = '<tr><td colspan="100%">No records found</td></tr>';
+        }
+      } catch (err) {
+        console.error('Failed to fetch data:', err);
+      }
+    }
+
+    // Initial load + auto-refresh every 5 seconds
+    fetchData();
+    setInterval(fetchData, 1000);
+  </script>
+</body>
+</html>
